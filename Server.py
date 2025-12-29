@@ -1,15 +1,16 @@
 """
- HTTP Server Shell
- Author: Barak Gonen and Nir Dweck
+ Name: "Server.py"
+ Author: Barak Gonen and Nir Dweck and Gilad Elran
  Purpose: Provide a basis for Ex. 4
- Note: The code is written in a simple way, without classes, log files or
- other utilities, for educational purpose
- Usage: Fill the missing functions and constants
+ Date: 29/12/2025
 """
 
 # ייבוא מודולים
 import socket
 import os
+import logging
+
+
 
 # קבועים - הגדרות השרת
 QUEUE_SIZE = 10
@@ -65,19 +66,23 @@ def handle_client_request(resource, client_socket):
     # אם ביקשו את / בלבד - נחזיר את index.html
     if resource == '/' or resource == '':
         uri = DEFAULT_URL
+        logging.info(f'The uri is {uri}')
     else:
         # מסירים את ה-/ מההתחלה
         uri = resource.lstrip('/')
+        logging.info(f'The uri is {uri}')
 
     # בדיקה מיוחדת: אם ביקשו /forbidden
     if resource == '/forbidden':
         http_header = 'HTTP/1.1 403 FORBIDDEN\r\n\r\n'
+        logging.warning('HTTP/1.1 403 FORBIDDEN')
         client_socket.send(http_header.encode())
         return
 
     # בדיקה מיוחדת: אם ביקשו /error
     if resource == '/error':
         http_header = 'HTTP/1.1 500 INTERNAL SERVER ERROR\r\n\r\n'
+        logging.error('HTTP/1.1 500 INTERNAL SERVER ERROR')
         client_socket.send(http_header.encode())
         return
 
@@ -85,6 +90,7 @@ def handle_client_request(resource, client_socket):
     if resource in REDIRECTION_DICTIONARY:
         new_location = REDIRECTION_DICTIONARY[resource]
         http_header = f'HTTP/1.1 302 MOVED TEMPORARILY\r\nLocation: {new_location}\r\n\r\n'
+        logging.info('HTTP/1.1 302 MOVED TEMPORARILY')
         client_socket.send(http_header.encode())
         return
 
@@ -95,6 +101,7 @@ def handle_client_request(resource, client_socket):
     if not os.path.isfile(file_path):
         # הקובץ לא נמצא - שולח 404
         http_header = 'HTTP/1.1 404 NOT FOUND\r\n\r\n'
+        logging.warning('HTTP/1.1 404 NOT FOUND')
         client_socket.send(http_header.encode())
         return
 
@@ -108,9 +115,10 @@ def handle_client_request(resource, client_socket):
     # קורא את תוכן הקובץ
     try:
         data = get_file_data(uri)
-    except:
+    except Exception as e:
         # אם יש בעיה בקריאת הקובץ
         http_header = 'HTTP/1.1 500 INTERNAL SERVER ERROR\r\n\r\n'
+        logging.error(f'HTTP/1.1 500 INTERNAL SERVER ERROR{e}')
         client_socket.send(http_header.encode())
         return
 
@@ -138,19 +146,23 @@ def validate_http_request(request):
 
     # בדיקה: חייבות להיות לפחות 3 מילים
     if len(parts) < 3:
+        logging.error('Invalid HTTP request')
         return False, ''
+
 
     # בדיקה: המילה הראשונה חייבת להיות GET
     if parts[0] != 'GET':
+        logging.error('Invalid HTTP request: invalid verb')
         return False, ''
 
     # בדיקה: המילה השלישית חייבת להתחיל ב-HTTP/1.1
     if not parts[2].startswith('HTTP/1.1'):
+        logging.error('Invalid HTTP request: Version is not 1.1')
         return False, ''
 
     # המשאב שביקשו הוא המילה השנייה
     resource = parts[1]
-
+    logging.info("Valid HTTP request")
     return True, resource
 
 
@@ -168,7 +180,7 @@ def handle_client(client_socket):
 
         # קורא תו אחר תו עד שרואים שורה ריקה
         while True:
-            # קורא בדיוק תו אחד (1 בייט)
+            # קורא בדיוק תו אחד כל פעם (1 בייט)
             char = client_socket.recv(1).decode()
             client_request += char
 
@@ -181,6 +193,7 @@ def handle_client(client_socket):
 
         # לוקח רק את השורה הראשונה (זה מה שמעניין אותנו)
         first_line = client_request.split('\r\n')[0]
+        logging.info(f'First line: {first_line}')
 
         # בודק אם הבקשה תקינה
         valid_http, resource = validate_http_request(first_line)
@@ -198,12 +211,14 @@ def handle_client(client_socket):
         print('Socket timeout - no data received')
     except Exception as e:
         print(f'Error handling client: {e}')
+        logging.error(e)
 
     print('Closing connection')
 
 
 def main():
-    # פותח סוקט ומחכה ללקוחות
+    # main function: פותחת סוקט ומחכה ללקוחות
+
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
         server_socket.bind((IP, PORT))
@@ -220,12 +235,45 @@ def main():
                 print('received socket exception - ' + str(err))
             finally:
                 client_socket.close()
+                logging.info('Closing connection')
     except socket.error as err:
         print('received socket exception - ' + str(err))
     finally:
         server_socket.close()
+        logging.info('Closing Server')
 
 
 if __name__ == "__main__":
-    # Call the main handler function
+
+    # Logging setup
+    # ------------------------------
+    logging.basicConfig(
+        filename='Server.log',
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s'
+    )
+    #------------------------------
+
+
     main()
+
+
+    #asserts
+    # -----------------------------------
+
+    valid, resource = validate_http_request('GET / HTTP/1.1')
+    assert valid == True, "validate_http_request failed on valid request"
+    assert resource == '/', "validate_http_request returned wrong resource"
+
+    # בדיקה: validate_http_request דוחה בקשה לא תקינה
+    valid, resource = validate_http_request('POST / HTTP/1.1')
+    assert valid == False, "validate_http_request should reject POST"
+
+    # בדיקה: get_file_data קוראת קובץ
+    if os.path.isfile(os.path.join(WEBROOT, DEFAULT_URL)):
+        data = get_file_data(DEFAULT_URL)
+        assert data is not None, "get_file_data returned None"
+        assert isinstance(data, bytes), "get_file_data should return bytes"
+
+    logging.info('Server started: All assert tests passed successfully')
+    # -----------------------------------
