@@ -253,12 +253,7 @@ if __name__ == "__main__":
         format='%(asctime)s - %(levelname)s - %(message)s'
     )
     #------------------------------
-
-
-    main()
-
-
-    #asserts
+    # asserts
     # -----------------------------------
 
     valid, resource = validate_http_request('GET / HTTP/1.1')
@@ -266,7 +261,7 @@ if __name__ == "__main__":
     assert resource == '/', "validate_http_request returned wrong resource"
 
     # בדיקה: validate_http_request דוחה בקשה לא תקינה
-    valid, resource = validate_http_request('POST / HTTP/1.1')
+    valid, resource = validate_http_request('POST / HTTP/1.1') # should get an error logging
     assert valid == False, "validate_http_request should reject POST"
 
     # בדיקה: get_file_data קוראת קובץ
@@ -277,3 +272,8 @@ if __name__ == "__main__":
 
     logging.info('Server started: All assert tests passed successfully')
     # -----------------------------------
+
+
+    main()
+
+
