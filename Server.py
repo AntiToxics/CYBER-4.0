@@ -5,31 +5,30 @@
  Date: 29/12/2025
 """
 
-# ייבוא מודולים
+# Import modules
 import socket
 import os
 import logging
 
 
-
-# קבועים - הגדרות השרת
+# Server configuration constants
 QUEUE_SIZE = 10
 IP = '0.0.0.0'
 PORT = 80
 SOCKET_TIMEOUT = 2
 
-# התיקייה שבה נמצאים כל הקבצים של האתר
+# Directory that contains all website files
 WEBROOT = 'web_root'
 
-# הקובץ שנחזיר כשמבקשים את /
+# File returned when requesting "/"
 DEFAULT_URL = 'index.html'
 
-# מילון של URL שצריך להפנות אותם למקום אחר (302)
+# Dictionary of URLs that should be redirected (302)
 REDIRECTION_DICTIONARY = {
     '/moved': '/'
 }
 
-# מילון של סוגי קבצים - מה לשלוח ב-Content-Type
+# Dictionary of file types for Content-Type header
 CONTENT_TYPES = {
     'html': 'text/html;charset=utf-8',
     'jpg': 'image/jpeg',
@@ -44,11 +43,12 @@ CONTENT_TYPES = {
 
 def get_file_data(file_name):
     """
-    קורא נתונים מקובץ
-    :param file_name: שם הקובץ
-    :return: הנתונים מהקובץ (בתור bytes)
+    Reads data from a file
+
+    :param file_name: File name
+    :return: File data (as bytes)
     """
-    # בונה את הנתיב המלא לקובץ
+    # Build the full path to the file
     file_path = os.path.join(WEBROOT, file_name)
 
     with open(file_path, 'rb') as file:
@@ -57,36 +57,36 @@ def get_file_data(file_name):
 
 def handle_client_request(resource, client_socket):
     """
-    מטפל בבקשה של הלקוח - בודק מה הוא רוצה ושולח תשובה
-    :param resource: המשאב שהלקוח ביקש (למשל /index.html)
-    :param client_socket: הסוקט לתקשורת עם הלקוח
+    Handles the client request – checks what was requested and sends a response
+    :param resource: Requested resource (e.g. /index.html)
+    :param client_socket: Socket used to communicate with the client
     :return: None
     """
 
-    # אם ביקשו את / בלבד - נחזיר את index.html
-    if resource == '/' or resource == '':
+    # If only "/" was requested, return index.html
+    if resource == '/':
         uri = DEFAULT_URL
         logging.info(f'The uri is {uri}')
     else:
-        # מסירים את ה-/ מההתחלה
+        # Remove the leading "/" from the resource
         uri = resource.lstrip('/')
         logging.info(f'The uri is {uri}')
 
-    # בדיקה מיוחדת: אם ביקשו /forbidden
+    # Special check: if "/forbidden" was requested
     if resource == '/forbidden':
         http_header = 'HTTP/1.1 403 FORBIDDEN\r\n\r\n'
         logging.warning('HTTP/1.1 403 FORBIDDEN')
         client_socket.send(http_header.encode())
         return
 
-    # בדיקה מיוחדת: אם ביקשו /error
+    # Special check: if "/error" was requested
     if resource == '/error':
         http_header = 'HTTP/1.1 500 INTERNAL SERVER ERROR\r\n\r\n'
         logging.error('HTTP/1.1 500 INTERNAL SERVER ERROR')
         client_socket.send(http_header.encode())
         return
 
-    # בדיקה: אם צריך להפנות למקום אחר (302)
+    # Check if the request should be redirected (302)
     if resource in REDIRECTION_DICTIONARY:
         new_location = REDIRECTION_DICTIONARY[resource]
         http_header = f'HTTP/1.1 302 MOVED TEMPORARILY\r\nLocation: {new_location}\r\n\r\n'
@@ -94,73 +94,73 @@ def handle_client_request(resource, client_socket):
         client_socket.send(http_header.encode())
         return
 
-    # בונה את הנתיב המלא לקובץ
+    # Build the full path to the requested file
     file_path = os.path.join(WEBROOT, uri)
 
-    # בודק אם הקובץ קיים
+    # Check if the file exists
     if not os.path.isfile(file_path):
-        # הקובץ לא נמצא - שולח 404
+        # File not found – send 404
         http_header = 'HTTP/1.1 404 NOT FOUND\r\n\r\n'
         logging.warning('HTTP/1.1 404 NOT FOUND')
         client_socket.send(http_header.encode())
         return
 
-    # מוצא את סוג הקובץ (הסיומת)
-    # למשל: index.html -> html
+    # Extract file extension
+    # Example: index.html -> html
     file_extension = uri.split('.')[-1]
 
-    # מוצא את ה-Content-Type המתאים
-    content_type = CONTENT_TYPES.get(file_extension, 'text/plain')
+    # Get the matching Content-Type
+    content_type = CONTENT_TYPES.get(file_extension)
 
-    # קורא את תוכן הקובץ
+    # Read file content
     try:
         data = get_file_data(uri)
     except Exception as e:
-        # אם יש בעיה בקריאת הקובץ
+        # Error while reading the file
         http_header = 'HTTP/1.1 500 INTERNAL SERVER ERROR\r\n\r\n'
         logging.error(f'HTTP/1.1 500 INTERNAL SERVER ERROR{e}')
         client_socket.send(http_header.encode())
         return
 
-    # בונה את ה-HTTP Header
+    # Build the HTTP header
     http_header = 'HTTP/1.1 200 OK\r\n'
     http_header += f'Content-Type: {content_type}\r\n'
     http_header += f'Content-Length: {len(data)}\r\n'
-    http_header += '\r\n'  # שורה ריקה לסיום ההדרים
+    http_header += '\r\n'  # Empty line to end headers
 
-    # שולח את התשובה: ההדר (טקסט) + הנתונים (בינארי)
+    # Send response: header (text) + file data (binary)
     http_response = http_header.encode() + data
     client_socket.send(http_response)
 
 
 def validate_http_request(request):
     """
-    בודק אם הבקשה היא בקשת HTTP תקינה
-    :param request: הבקשה שהתקבלה מהלקוח
-    :return: tuple של (True/False האם תקין, המשאב שביקשו)
+    Checks whether the request is a valid HTTP request
+
+    :param request: Request received from the client
+    :return: Tuple (True/False if valid, requested resource)
     """
 
-    # מפרק את הבקשה למילים
-    # למשל: "GET /index.html HTTP/1.1" -> ["GET", "/index.html", "HTTP/1.1"]
+    # Split the request line into parts
+    # Example: "GET /index.html HTTP/1.1"
     parts = request.split(' ')
 
-    # בדיקה: חייבות להיות לפחות 3 מילים
+    # Check: must contain at least 3 parts
     if len(parts) < 3:
         logging.error('Invalid HTTP request')
         return False, ''
 
-
-    # בדיקה: המילה הראשונה חייבת להיות GET
+    # Check: first word must be GET
     if parts[0] != 'GET':
         logging.error('Invalid HTTP request: invalid verb')
         return False, ''
 
-    # בדיקה: המילה השלישית חייבת להתחיל ב-HTTP/1.1
+    # Check: HTTP version must start with HTTP/1.1
     if not parts[2].startswith('HTTP/1.1'):
         logging.error('Invalid HTTP request: Version is not 1.1')
         return False, ''
 
-    # המשאב שביקשו הוא המילה השנייה
+    # The requested resource is the second part
     resource = parts[1]
     logging.info("Valid HTTP request")
     return True, resource
@@ -168,34 +168,30 @@ def validate_http_request(request):
 
 def handle_client(client_socket):
     """
-    מטפל בלקוח: מקבל בקשה, בודק שהיא תקינה, ועונה
-    :param client_socket: הסוקט לתקשורת עם הלקוח
+    Handles a client: receives a request, validates it, and responds
+    :param client_socket: Socket used to communicate with the client
     :return: None
     """
     print('Client connected')
 
     try:
-        # מקבל נתונים מהלקוח תו אחר תו עד שמגיעה שורה ריקה (\r\n\r\n)
+        # Receive data from the client character by character
+        # until an empty line (\r\n\r\n) is received
         client_request = ''
 
-        # קורא תו אחר תו עד שרואים שורה ריקה
-        while True:
-            # קורא בדיוק תו אחד כל פעם (1 בייט)
+        while not client_request.endswith('\r\n\r\n'):
+            # Read exactly one byte at a time
             char = client_socket.recv(1).decode()
             client_request += char
 
-            # בודק אם הגענו לסוף ההדרים (שורה ריקה)
-            if client_request.endswith('\r\n\r\n'):
-                break
-
-        # מדפיס את הבקשה כדי לראות מה התקבל
+        # Print the full request
         print(f'Client request:\n{client_request}')
 
-        # לוקח רק את השורה הראשונה (זה מה שמעניין אותנו)
+        # Extract only the first line
         first_line = client_request.split('\r\n')[0]
         logging.info(f'First line: {first_line}')
 
-        # בודק אם הבקשה תקינה
+        # Validate the HTTP request
         valid_http, resource = validate_http_request(first_line)
 
         if valid_http:
@@ -203,7 +199,7 @@ def handle_client(client_socket):
             handle_client_request(resource, client_socket)
         else:
             print('Error: Not a valid HTTP request')
-            # שולח שגיאה 400
+            # Send 400 Bad Request
             http_header = 'HTTP/1.1 400 BAD REQUEST\r\n\r\n'
             client_socket.send(http_header.encode())
 
@@ -217,7 +213,7 @@ def handle_client(client_socket):
 
 
 def main():
-    # main function: פותחת סוקט ומחכה ללקוחות
+    # Main function: opens a socket and waits for clients
 
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
@@ -232,12 +228,12 @@ def main():
                 client_socket.settimeout(SOCKET_TIMEOUT)
                 handle_client(client_socket)
             except socket.error as err:
-                print('received socket exception - ' + str(err))
+                print('Received socket exception - ' + str(err))
             finally:
                 client_socket.close()
                 logging.info('Closing connection')
     except socket.error as err:
-        print('received socket exception - ' + str(err))
+        print('Received socket exception - ' + str(err))
     finally:
         server_socket.close()
         logging.info('Closing Server')
@@ -246,34 +242,27 @@ def main():
 if __name__ == "__main__":
 
     # Logging setup
-    # ------------------------------
     logging.basicConfig(
         filename='Server.log',
         level=logging.INFO,
         format='%(asctime)s - %(levelname)s - %(message)s'
     )
-    #------------------------------
-    # asserts
-    # -----------------------------------
 
+    # Assertions / tests
     valid, resource = validate_http_request('GET / HTTP/1.1')
-    assert valid == True, "validate_http_request failed on valid request"
+    assert valid is True, "validate_http_request failed on valid request"
     assert resource == '/', "validate_http_request returned wrong resource"
 
-    # בדיקה: validate_http_request דוחה בקשה לא תקינה
-    valid, resource = validate_http_request('POST / HTTP/1.1') # should get an error logging
-    assert valid == False, "validate_http_request should reject POST"
+    # Test: validate_http_request rejects invalid requests
+    valid, resource = validate_http_request('POST / HTTP/1.1')  # should log an error
+    assert valid is False, "validate_http_request should reject POST"
 
-    # בדיקה: get_file_data קוראת קובץ
+    # Test: get_file_data reads a file
     if os.path.isfile(os.path.join(WEBROOT, DEFAULT_URL)):
         data = get_file_data(DEFAULT_URL)
         assert data is not None, "get_file_data returned None"
         assert isinstance(data, bytes), "get_file_data should return bytes"
 
     logging.info('Server started: All assert tests passed successfully')
-    # -----------------------------------
-
 
     main()
-
-
