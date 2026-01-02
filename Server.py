@@ -1,7 +1,7 @@
 """
  Name: "Server.py"
- Author: Barak Gonen and Nir Dweck and Gilad Elran
- Purpose: Provide a basis for Ex. 4
+ Author: Gilad Elran
+ Purpose: Provides a Client-Server connection with protocol HTTP/1.1
  Date: 29/12/2025
 """
 
@@ -16,6 +16,11 @@ QUEUE_SIZE = 10
 IP = '0.0.0.0'
 PORT = 80
 SOCKET_TIMEOUT = 2
+HTTP_200 = 'HTTP/1.1 200 OK\r\n'
+HTTP_400 = 'HTTP/1.1 400 BAD REQUEST\r\n'
+HTTP_403 = 'HTTP/1.1 403 FORBIDDEN\r\n\r\n'
+HTTP_404 = 'HTTP/1.1 404 NOT FOUND\r\n\r\n'
+HTTP_500 = 'HTTP/1.1 500 INTERNAL SERVER ERROR\r\n\r\n'
 
 # Directory that contains all website files
 WEBROOT = 'web_root'
@@ -74,14 +79,14 @@ def handle_client_request(resource, client_socket):
 
     # Special check: if "/forbidden" was requested
     if resource == '/forbidden':
-        http_header = 'HTTP/1.1 403 FORBIDDEN\r\n\r\n'
+        http_header = HTTP_403
         logging.warning('HTTP/1.1 403 FORBIDDEN')
         client_socket.send(http_header.encode())
         return
 
     # Special check: if "/error" was requested
     if resource == '/error':
-        http_header = 'HTTP/1.1 500 INTERNAL SERVER ERROR\r\n\r\n'
+        http_header = HTTP_500
         logging.error('HTTP/1.1 500 INTERNAL SERVER ERROR')
         client_socket.send(http_header.encode())
         return
@@ -100,7 +105,7 @@ def handle_client_request(resource, client_socket):
     # Check if the file exists
     if not os.path.isfile(file_path):
         # File not found – send 404
-        http_header = 'HTTP/1.1 404 NOT FOUND\r\n\r\n'
+        http_header = HTTP_404
         logging.warning('HTTP/1.1 404 NOT FOUND')
         client_socket.send(http_header.encode())
         return
@@ -117,13 +122,13 @@ def handle_client_request(resource, client_socket):
         data = get_file_data(uri)
     except Exception as e:
         # Error while reading the file
-        http_header = 'HTTP/1.1 500 INTERNAL SERVER ERROR\r\n\r\n'
+        http_header = HTTP_500
         logging.error(f'HTTP/1.1 500 INTERNAL SERVER ERROR{e}')
         client_socket.send(http_header.encode())
         return
 
     # Build the HTTP header
-    http_header = 'HTTP/1.1 200 OK\r\n'
+    http_header = HTTP_200
     http_header += f'Content-Type: {content_type}\r\n'
     http_header += f'Content-Length: {len(data)}\r\n'
     http_header += '\r\n'  # Empty line to end headers
@@ -200,7 +205,7 @@ def handle_client(client_socket):
         else:
             print('Error: Not a valid HTTP request')
             # Send 400 Bad Request
-            http_header = 'HTTP/1.1 400 BAD REQUEST\r\n\r\n'
+            http_header = HTTP_400
             client_socket.send(http_header.encode())
 
     except socket.timeout:
